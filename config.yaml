@@ -1,0 +1,32 @@
+# セルフ・キュレーション設定 (M1)
+
+# RSSフィード。main: 普段の興味 / serendipity: あえて混ぜるジャンル
+feeds:
+  main:
+    - https://b.hatena.ne.jp/hotentry/it.rss          # はてブ テクノロジー
+    - https://www.nikkei.com/rss/markets.rdf           # 日経マーケット(例。任意に差し替え)
+    - https://gigazine.net/news/rss_2.0/               # GIGAZINE
+  serendipity:
+    - https://b.hatena.ne.jp/hotentry/knowledge.rss    # はてブ 学び(歴史・科学など)
+    - https://www.natureasia.com/ja-jp/ndigest/rss     # Nature ダイジェスト(例)
+
+# M1では単純比率で選定(M2で埋め込みスコアリングに置き換え)
+selection:
+  total_articles: 10        # 1日に読む記事数
+  serendipity_ratio: 0.2    # 20%を serendipity フィードから
+
+# あなたの興味プロファイル(生成プロンプトに埋め込まれる)
+profile: |
+  読者は日本在住のエンジニア。関心領域:
+  - 技術: Three.js/3D都市データ(PLATEAU)、Python、AI活用、自動化パイプライン
+  - 金融: デリバティブ(Hull教科書を学習中)、日本株のアルゴトレード、簿記・会計
+  - その他: 歴史、哲学、ピアノ、子育て
+
+llm:
+  model: claude-sonnet-5
+  max_tokens: 8000
+  # 記事本文はこの文字数で切り詰めてAPIに渡す(コスト削減)
+  body_char_limit: 2000
+
+output:
+  html_path: output/daily.html
