@@ -1,7 +1,8 @@
-"""セルフ・キュレーション・テキストメディア — M1
-RSS収集 → SQLite保存 → Claude APIで高密度要約 → HTML出力
+"""セルフ・キュレーション・テキストメディア — M2
+RSS収集 → SQLite保存 → 埋め込みで80/20選定 → Claude APIで高密度要約 → HTML出力
 
 実行: python main.py
+フィードバック記録: python main.py feedback <article_id> up|down
 必要: pip install -r requirements.txt / 環境変数 ANTHROPIC_API_KEY
 """
 
@@ -15,9 +16,11 @@ from pathlib import Path
 
 import anthropic
 import feedparser
+import numpy as np
 import trafilatura
 import yaml
 from jinja2 import Environment, FileSystemLoader
+from sentence_transformers import SentenceTransformer
 
 ROOT = Path(__file__).parent
 DB_PATH = ROOT / "curation.db"
@@ -37,6 +40,14 @@ def init_db(conn: sqlite3.Connection) -> None:
             body TEXT,
             fetched_at TEXT,
             used_at TEXT             -- 要約に使った日付(既読管理)
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY,
+            article_id INTEGER NOT NULL REFERENCES articles(id),
+            rating INTEGER NOT NULL,  -- 1 = 👍, -1 = 👎
+            created_at TEXT
         )
     """)
     conn.commit()
@@ -86,25 +97,87 @@ def fetch_body(url: str, limit: int) -> str:
         return ""
 
 
-# ---------- 2. 選定層 (M1: 単純比率。M2で埋め込みに置換) ----------
+# ---------- 2. 選定層 (M2: 埋め込みベクトルによる80/20選定) ----------
+
+_embed_model: SentenceTransformer | None = None
+
+
+def _get_embed_model(name: str) -> SentenceTransformer:
+    global _embed_model
+    if _embed_model is None:
+        _embed_model = SentenceTransformer(name)
+    return _embed_model
+
+
+def embed(texts: list[str], model_name: str) -> np.ndarray:
+    """正規化済み埋め込みベクトルを返す(コサイン類似度 = 内積)。"""
+    model = _get_embed_model(model_name)
+    return model.encode(texts, normalize_embeddings=True)
+
 
 def select_articles(conn: sqlite3.Connection, cfg: dict) -> list[dict]:
-    total = cfg["selection"]["total_articles"]
-    n_ser = max(1, round(total * cfg["selection"]["serendipity_ratio"]))
+    sel_cfg = cfg["selection"]
+    total = sel_cfg["total_articles"]
+    n_ser = max(1, round(total * sel_cfg["serendipity_ratio"]))
     n_main = total - n_ser
+    lo, hi = sel_cfg["serendipity_similarity_range"]
 
-    def pick(source: str, n: int) -> list[dict]:
-        rows = conn.execute(
-            """SELECT id, url, title, source FROM articles
-               WHERE used_at IS NULL AND source = ?
-               ORDER BY fetched_at DESC LIMIT 50""",
-            (source,),
-        ).fetchall()
-        rows = [dict(zip(("id", "url", "title", "source"), r)) for r in rows]
-        random.shuffle(rows)
-        return rows[:n]
+    rows = conn.execute(
+        """SELECT id, url, title, source FROM articles
+           WHERE used_at IS NULL
+           ORDER BY fetched_at DESC LIMIT ?""",
+        (sel_cfg["candidate_pool_limit"],),
+    ).fetchall()
+    candidates = [dict(zip(("id", "url", "title", "source"), r)) for r in rows]
+    if not candidates:
+        return []
 
-    return pick("main", n_main) + pick("serendipity", n_ser)
+    model_name = sel_cfg["embedding_model"]
+    profile_vec = embed([cfg["profile"]], model_name)[0]
+    title_vecs = embed([c["title"] for c in candidates], model_name)
+    similarities = title_vecs @ profile_vec
+    for c, sim in zip(candidates, similarities):
+        c["similarity"] = float(sim)
+
+    # 80%: プロファイルに最も近い記事
+    ranked = sorted(candidates, key=lambda c: c["similarity"], reverse=True)
+    main_picks = ranked[:n_main]
+    picked_ids = {c["id"] for c in main_picks}
+
+    # 20%: 類似度が中庸(=無関係でも想定内でもない)帯からランダム抽出
+    ser_pool = [
+        c for c in candidates
+        if c["id"] not in picked_ids and lo <= c["similarity"] <= hi
+    ]
+    random.shuffle(ser_pool)
+    ser_picks = ser_pool[:n_ser]
+
+    # 帯の該当記事が足りない場合は帯の中心に近い順で補充
+    if len(ser_picks) < n_ser:
+        chosen_ids = picked_ids | {c["id"] for c in ser_picks}
+        mid = (lo + hi) / 2
+        fallback = sorted(
+            (c for c in candidates if c["id"] not in chosen_ids),
+            key=lambda c: abs(c["similarity"] - mid),
+        )
+        ser_picks += fallback[: n_ser - len(ser_picks)]
+
+    for c in main_picks:
+        c["source"] = "main"
+    for c in ser_picks:
+        c["source"] = "serendipity"
+
+    return main_picks + ser_picks
+
+
+# ---------- フィードバック記録 ----------
+
+def record_feedback(conn: sqlite3.Connection, article_id: int, rating: int) -> None:
+    conn.execute(
+        "INSERT INTO feedback (article_id, rating, created_at) VALUES (?, ?, ?)",
+        (article_id, rating, datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
 
 
 # ---------- 3. 生成層 ----------
@@ -166,9 +239,11 @@ def render_html(digest: dict, articles: list[dict], cfg: dict) -> Path:
     env = Environment(loader=FileSystemLoader(ROOT / "templates"))
     tmpl = env.get_template("daily.html.j2")
 
-    src_by_url = {a["url"]: a["source"] for a in articles}
+    by_url = {a["url"]: a for a in articles}
     for item in digest.get("articles", []):
-        item["source"] = src_by_url.get(item.get("url"), "main")
+        src = by_url.get(item.get("url"))
+        item["source"] = src["source"] if src else "main"
+        item["id"] = src["id"] if src else None
 
     out = ROOT / cfg["output"]["html_path"]
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -221,5 +296,19 @@ def main() -> None:
     print(f"完成: {out}  (ブラウザで開いてください)")
 
 
+def feedback_cli(article_id: str, rating: str) -> None:
+    if rating not in ("up", "down"):
+        sys.exit("使い方: python main.py feedback <article_id> up|down")
+    conn = sqlite3.connect(DB_PATH)
+    init_db(conn)
+    record_feedback(conn, int(article_id), 1 if rating == "up" else -1)
+    print(f"記録しました: article_id={article_id} rating={rating}")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "feedback":
+        if len(sys.argv) != 4:
+            sys.exit("使い方: python main.py feedback <article_id> up|down")
+        feedback_cli(sys.argv[2], sys.argv[3])
+    else:
+        main()
