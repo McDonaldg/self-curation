@@ -1,6 +1,6 @@
-# セルフ・キュレーション・テキストメディア (M2)
+# セルフ・キュレーション・テキストメディア (M3)
 
-RSS → SQLite → 埋め込みで80/20選定 → Claude API(高密度要約+クロス洞察) → HTML 1枚。
+RSS/YouTube → SQLite → 埋め込みで80/20選定 → Claude API(高密度要約+クロス洞察) → HTML 1枚。
 
 ## セットアップ
 
@@ -16,6 +16,22 @@ open output/daily.html                 # macOS。Windowsは start
 ```
 0 6 * * 1-5 cd /path/to/self-curation && /usr/bin/python3 main.py
 ```
+
+## YouTube字幕取り込み (M3)
+
+`config.yaml` の `youtube` に main/serendipity 別でチャンネル・プレイリストのURLを
+追加すると、RSSと同じ扱いでパイプラインに乗る:
+
+```yaml
+youtube:
+  main:
+    - https://www.youtube.com/@your-favorite-channel
+```
+
+- 動画一覧の取得は `yt-dlp` の `extract_flat` で軽量に(ダウンロードなし)
+- 選定後、本文の代わりに字幕(手動優先、なければ自動生成。ja→en)を取得しテキスト化
+- 字幕が存在しない動画は本文取得不可として扱われる(タイトルのみで要約)
+- `youtube:` セクションが空/未設定でも既存のRSSパイプラインはそのまま動く
 
 ## フィードバック記録
 
@@ -56,6 +72,5 @@ python main.py feedback 42 down    # 👎
 
 ## 次のマイルストーン
 
-- M3: yt-dlp字幕取り込み、Batch API(50%オフ)
-- M4: Notion API連携 or GitHub Actions化
+- M4: Batch API(50%オフ)、Notion API連携 or GitHub Actions化
 - M5: フィードバック(👍/👎)を選定スコアに反映(例: 👎が多いソースの重み低下)

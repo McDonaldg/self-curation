@@ -10,6 +10,14 @@ feeds:
     - https://b.hatena.ne.jp/hotentry/knowledge.rss    # はてブ 学び(歴史・科学など)
     - https://www.natureasia.com/ja-jp/ndigest/rss     # Nature ダイジェスト(例)
 
+# M3: YouTubeチャンネル/プレイリスト(字幕をyt-dlpで取り込む)。任意、空でも動作する
+# youtube:
+#   main:
+#     - https://www.youtube.com/@your-favorite-channel
+#   serendipity:
+#     - https://www.youtube.com/@some-other-channel
+youtube: {}
+
 # M2: 埋め込みベクトルによる80/20選定
 selection:
   total_articles: 10        # 1日に読む記事数
