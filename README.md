@@ -51,6 +51,9 @@ python main.py feedback 42 up      # 👍
 python main.py feedback 42 down    # 👎
 ```
 
+このコマンドは標準ライブラリのみで動くため、`pip install -r requirements.txt` を
+していない環境でも記録できる。
+
 `curation.db` の `feedback` テーブルに蓄積される(article_id, rating, created_at)。
 将来のマイルストーンでランキング学習に使う想定。
 
