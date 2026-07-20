@@ -1,4 +1,4 @@
-# セルフ・キュレーション・テキストメディア (M3)
+# セルフ・キュレーション・テキストメディア (M4)
 
 RSS/YouTube → SQLite → 埋め込みで80/20選定 → Claude API(高密度要約+クロス洞察) → HTML 1枚。
 
@@ -11,7 +11,16 @@ python main.py
 open output/daily.html                 # macOS。Windowsは start
 ```
 
-## 毎朝の自動実行 (cron 例: 平日6:00)
+## 毎朝の自動実行
+
+### GitHub Actions (推奨・設定済み)
+
+`.github/workflows/daily-curation.yml` に平日6:00 JST(`cron: "0 21 * * 0-4"`, UTC基準)の
+スケジュールを設定済み。リポジトリの Settings → Secrets に `ANTHROPIC_API_KEY` を登録すれば、
+プッシュ後は自動的に毎朝実行され、`curation.db` の更新がコミットされ、
+GitHub Pages に最新のダイジェストが公開される。`workflow_dispatch` で手動実行も可能。
+
+### ローカルcron (代替)
 
 ```
 0 6 * * 1-5 cd /path/to/self-curation && /usr/bin/python3 main.py
@@ -72,5 +81,7 @@ python main.py feedback 42 down    # 👎
 
 ## 次のマイルストーン
 
-- M4: Batch API(50%オフ)、Notion API連携 or GitHub Actions化
 - M5: フィードバック(👍/👎)を選定スコアに反映(例: 👎が多いソースの重み低下)
+- 保留中: Batch API(50%オフ)— 最大24時間の非同期方式で「朝実行→即読む」運用と
+  相性が悪いため、実際のAPIコストが問題になった時点で2段階フロー化を再検討
+- 保留中: Notion API連携 — HTML配信で当面十分なため優先度低

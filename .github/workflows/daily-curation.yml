@@ -2,6 +2,9 @@ name: Daily Curation
 
 on:
   workflow_dispatch: {}
+  schedule:
+    # 平日6:00 JST(UTC+9) = 前日21:00 UTC 日〜木
+    - cron: "0 21 * * 0-4"
 
 permissions:
   contents: write
