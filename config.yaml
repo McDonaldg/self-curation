@@ -28,6 +28,11 @@ selection:
   embedding_model: paraphrase-multilingual-MiniLM-L12-v2
   candidate_pool_limit: 200  # 類似度計算の対象にする未読記事の上限(新しい順)
 
+  # M5: フィードバック(👍/👎)をフィード/チャンネル単位の重みとしてスコアに反映
+  # スコア = 類似度 × (1 + feedback_weight × (👍数-👎数)/(👍数+👎数))
+  feedback_weight: 0.3       # 0で無効化。大きいほどフィードバックの影響が強い
+  feedback_min_samples: 3    # このフィードバック件数に満たないfeed_urlは中立(重み1.0)扱い
+
 # あなたの興味プロファイル(生成プロンプトに埋め込まれる)
 profile: |
   読者は日本在住のエンジニア。関心領域:

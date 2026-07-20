@@ -1,4 +1,4 @@
-# セルフ・キュレーション・テキストメディア (M4)
+# セルフ・キュレーション・テキストメディア (M5)
 
 RSS/YouTube → SQLite → 埋め込みで80/20選定 → Claude API(高密度要約+クロス洞察) → HTML 1枚。
 
@@ -55,9 +55,9 @@ python main.py feedback 42 down    # 👎
 していない環境でも記録できる。
 
 `curation.db` の `feedback` テーブルに蓄積される(article_id, rating, created_at)。
-将来のマイルストーンでランキング学習に使う想定。
+M5から選定スコアに反映されるようになった。
 
-## 記事選定ロジック (M2)
+## 記事選定ロジック (M2 + M5)
 
 `profile` とすべての未読記事タイトルを埋め込みベクトル化し、コサイン類似度でスコアリング。
 
@@ -68,11 +68,24 @@ python main.py feedback 42 down    # 👎
 埋め込みはローカルの `sentence-transformers`(`paraphrase-multilingual-MiniLM-L12-v2`)で
 計算するため追加のAPIキーは不要。初回実行時にモデルをダウンロードする。
 
+### フィードバックのスコア反映 (M5)
+
+フィード/YouTubeチャンネル(`feed_url`)単位で過去の👍/👎を集計し、類似度に重みをかける:
+
+```
+スコア = 類似度 × (1 + feedback_weight × (👍数 − 👎数) / (👍数 + 👎数))
+```
+
+- `feedback_min_samples` 件未満のフィードは中立(重み1.0)のまま
+- `feedback_weight`(既定0.3)を上げるほどフィードバックの影響が強くなる
+- 👎が多いフィードのスコアが下がる → 選ばれにくくなり、80/20選定にもそのまま反映される
+
 ## カスタマイズ
 
 - `config.yaml` の feeds を差し替え(main = 普段の興味 / serendipity = 混ぜる枠)
 - profile を書き換えると選定と洞察の「引き付け先」が両方変わる
 - serendipity_similarity_range で中庸帯の幅を調整
+- feedback_weight / feedback_min_samples でフィードバックの効き具合を調整
 - body_char_limit と total_articles がトークン消費の主変数
 
 ## コスト設計(実装済み)
@@ -84,7 +97,8 @@ python main.py feedback 42 down    # 👎
 
 ## 次のマイルストーン
 
-- M5: フィードバック(👍/👎)を選定スコアに反映(例: 👎が多いソースの重み低下)
+- M6: フィードバックの蓄積量が増えたら、記事本文/クロス洞察との相関も見て
+  重み付けを feed_url 単位からさらに細かく(トピック単位など)する
 - 保留中: Batch API(50%オフ)— 最大24時間の非同期方式で「朝実行→即読む」運用と
   相性が悪いため、実際のAPIコストが問題になった時点で2段階フロー化を再検討
 - 保留中: Notion API連携 — HTML配信で当面十分なため優先度低

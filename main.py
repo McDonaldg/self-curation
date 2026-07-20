@@ -218,6 +218,26 @@ def embed(texts: list[str], model_name: str):
     return model.encode(texts, normalize_embeddings=True)
 
 
+def compute_feed_weights(conn: sqlite3.Connection, weight: float, min_samples: int) -> dict[str, float]:
+    """feed_url(RSS/YouTubeチャンネル)ごとの過去フィードバックから重みを算出する。
+    サンプル数がmin_samples未満のfeed_urlは中立(1.0)のまま。"""
+    rows = conn.execute(
+        """SELECT a.feed_url,
+                  SUM(CASE WHEN f.rating = 1 THEN 1 ELSE 0 END) AS up,
+                  SUM(CASE WHEN f.rating = -1 THEN 1 ELSE 0 END) AS down
+           FROM feedback f JOIN articles a ON a.id = f.article_id
+           GROUP BY a.feed_url"""
+    ).fetchall()
+    weights = {}
+    for feed_url, up, down in rows:
+        total = up + down
+        if total < min_samples:
+            continue
+        ratio = (up - down) / total  # -1.0(全部👎) 〜 1.0(全部👍)
+        weights[feed_url] = max(0.0, 1.0 + weight * ratio)
+    return weights
+
+
 def select_articles(conn: sqlite3.Connection, cfg: dict) -> list[dict]:
     sel_cfg = cfg["selection"]
     total = sel_cfg["total_articles"]
@@ -226,21 +246,26 @@ def select_articles(conn: sqlite3.Connection, cfg: dict) -> list[dict]:
     lo, hi = sel_cfg["serendipity_similarity_range"]
 
     rows = conn.execute(
-        """SELECT id, url, title, source FROM articles
+        """SELECT id, url, title, source, feed_url FROM articles
            WHERE used_at IS NULL
            ORDER BY fetched_at DESC LIMIT ?""",
         (sel_cfg["candidate_pool_limit"],),
     ).fetchall()
-    candidates = [dict(zip(("id", "url", "title", "source"), r)) for r in rows]
+    candidates = [dict(zip(("id", "url", "title", "source", "feed_url"), r)) for r in rows]
     if not candidates:
         return []
+
+    feed_weights = compute_feed_weights(
+        conn, sel_cfg["feedback_weight"], sel_cfg["feedback_min_samples"]
+    )
 
     model_name = sel_cfg["embedding_model"]
     profile_vec = embed([cfg["profile"]], model_name)[0]
     title_vecs = embed([c["title"] for c in candidates], model_name)
     similarities = title_vecs @ profile_vec
     for c, sim in zip(candidates, similarities):
-        c["similarity"] = float(sim)
+        # 👎が多いfeed_urlは重みで減点、👍が多ければ加点(スコア = 類似度 × フィード重み)
+        c["similarity"] = float(sim) * feed_weights.get(c["feed_url"], 1.0)
 
     # 80%: プロファイルに最も近い記事
     ranked = sorted(candidates, key=lambda c: c["similarity"], reverse=True)
