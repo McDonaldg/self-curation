@@ -57,6 +57,43 @@ python main.py feedback 42 down    # 👎
 `curation.db` の `feedback` テーブルに蓄積される(article_id, rating, created_at)。
 M5から選定スコアに反映されるようになった。
 
+### GitHub Pages上でクリックで記録する (任意)
+
+GitHub Pagesは静的サイトなので、ページ上のボタンをクリックしただけでは
+`curation.db` に書き込めない。そこで Cloudflare Workers を仲介にして、
+クリック → Worker → GitHubの `repository_dispatch` → GitHub Actionsが
+`curation.db` を更新、という流れにする(`cloudflare-worker/` 参照)。
+
+```
+HTMLの👍/👎リンク(GET) → Cloudflare Worker → repository_dispatch
+                                             → feedback-dispatch.yml が起動
+                                             → main.py feedback で記録・commit
+```
+
+セットアップ手順:
+
+1. [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) をインストールし
+   `wrangler login`(Cloudflareアカウントが必要)
+2. `cloudflare-worker/wrangler.toml` の `GITHUB_OWNER`/`GITHUB_REPO` を確認(このリポジトリ用に設定済み)
+3. GitHubで、このリポジトリだけにアクセス可能な fine-grained PAT を発行
+   (権限: Contents = Read and write。うまく動かない場合は Actions = Read and write も追加)
+4. シークレットを設定してデプロイ:
+   ```bash
+   cd cloudflare-worker
+   wrangler secret put GITHUB_TOKEN        # 手順3で発行したPATを貼り付け
+   wrangler secret put FEEDBACK_TOKEN      # 任意。設定すると簡易的なボット対策になる
+   wrangler deploy
+   ```
+5. デプロイで表示されたURL(`https://self-curation-feedback.<subdomain>.workers.dev`)を
+   `config.yaml` の `feedback.endpoint` に `/vote` を付けて設定。`FEEDBACK_TOKEN` を設定した場合は
+   `feedback.token` にも同じ値を設定する
+6. `python main.py` を再実行(またはGitHub Actionsの次回実行)すると、HTML上のフィードバックが
+   CLIコマンドのヒントから👍/👎のクリックリンクに変わる
+
+**注意:** GitHub Pagesは誰でも閲覧できる公開ページのため、`FEEDBACK_TOKEN` を設定しても
+URLが分かれば誰でも投票できてしまう(本物の認証ではなく、簡易的なボット対策にすぎない)。
+個人の好み学習用途としてはリスクは低いが、認識した上で利用すること。
+
 ## 記事選定ロジック (M2 + M5)
 
 `profile` とすべての未読記事タイトルを埋め込みベクトル化し、コサイン類似度でスコアリング。

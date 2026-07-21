@@ -377,12 +377,16 @@ def render_html(digest: dict, articles: list[dict], cfg: dict) -> Path:
         item["source"] = src["source"] if src else "main"
         item["id"] = src["id"] if src else None
 
+    feedback_cfg = cfg.get("feedback") or {}
+
     out = ROOT / cfg["output"]["html_path"]
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
         tmpl.render(
             date=datetime.now().strftime("%Y年%m月%d日"),
             digest=digest,
+            feedback_endpoint=feedback_cfg.get("endpoint") or "",
+            feedback_token=feedback_cfg.get("token") or "",
         ),
         encoding="utf-8",
     )

@@ -51,6 +51,11 @@
   article .feedback code {
     background: #efece4; padding: .1em .4em; border-radius: 3px; font-size: .95em;
   }
+  article .feedback a.fb {
+    text-decoration: none; font-size: 1.1rem; margin-right: .6rem;
+    filter: grayscale(60%); opacity: .75;
+  }
+  article .feedback a.fb:hover { filter: none; opacity: 1; }
 
   section.cross { margin-top: 3.5rem; }
   section.cross h2, section.questions h2 {
@@ -89,7 +94,15 @@
   <p class="summary">{{ a.summary }}</p>
   <p class="premise">{{ a.hidden_premise }}</p>
   {% if a.id %}
-  <p class="feedback">評価: <code>python main.py feedback {{ a.id }} up</code> / <code>python main.py feedback {{ a.id }} down</code></p>
+  <p class="feedback">
+    評価:
+    {% if feedback_endpoint %}
+    <a class="fb" href="{{ feedback_endpoint }}?id={{ a.id }}&rating=up{{ '&token=' ~ feedback_token if feedback_token else '' }}">👍</a>
+    <a class="fb" href="{{ feedback_endpoint }}?id={{ a.id }}&rating=down{{ '&token=' ~ feedback_token if feedback_token else '' }}">👎</a>
+    {% else %}
+    <code>python main.py feedback {{ a.id }} up</code> / <code>python main.py feedback {{ a.id }} down</code>
+    {% endif %}
+  </p>
   {% endif %}
 </article>
 {% endfor %}

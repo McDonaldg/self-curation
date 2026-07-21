@@ -48,3 +48,9 @@ llm:
 
 output:
   html_path: output/daily.html
+
+# GitHub Pages上で👍/👎をクリックで記録する場合に設定(cloudflare-worker/参照)。
+# endpoint が空のままなら、従来通りHTMLにCLIコマンドのヒントが表示される
+feedback:
+  endpoint: ""   # 例: https://self-curation-feedback.<subdomain>.workers.dev/vote
+  token: ""      # Worker側のFEEDBACK_TOKENシークレットと同じ値にする(簡易なボット対策)
