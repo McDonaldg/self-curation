@@ -10,10 +10,28 @@ feeds:
     - https://b.hatena.ne.jp/hotentry/knowledge.rss    # はてブ 学び(歴史・科学など)
     - https://www.natureasia.com/ja-jp/ndigest/rss     # Nature ダイジェスト(例)
 
-# M1では単純比率で選定(M2で埋め込みスコアリングに置き換え)
+# M3: YouTubeチャンネル/プレイリスト(字幕をyt-dlpで取り込む)。任意、空でも動作する
+# youtube:
+#   main:
+#     - https://www.youtube.com/@your-favorite-channel
+#   serendipity:
+#     - https://www.youtube.com/@some-other-channel
+youtube: {}
+
+# M2: 埋め込みベクトルによる80/20選定
 selection:
   total_articles: 10        # 1日に読む記事数
-  serendipity_ratio: 0.2    # 20%を serendipity フィードから
+  serendipity_ratio: 0.2    # 20%を「中庸の類似度」枠から
+  # プロファイルとの類似度がこの帯に入る記事をセレンディピティ候補にする
+  # (低すぎ=無関係、高すぎ=想定内なので、あえて中間を狙う)
+  serendipity_similarity_range: [0.3, 0.6]
+  embedding_model: paraphrase-multilingual-MiniLM-L12-v2
+  candidate_pool_limit: 200  # 類似度計算の対象にする未読記事の上限(新しい順)
+
+  # M5: フィードバック(👍/👎)をフィード/チャンネル単位の重みとしてスコアに反映
+  # スコア = 類似度 × (1 + feedback_weight × (👍数-👎数)/(👍数+👎数))
+  feedback_weight: 0.3       # 0で無効化。大きいほどフィードバックの影響が強い
+  feedback_min_samples: 3    # このフィードバック件数に満たないfeed_urlは中立(重み1.0)扱い
 
 # あなたの興味プロファイル(生成プロンプトに埋め込まれる)
 profile: |
@@ -30,3 +48,9 @@ llm:
 
 output:
   html_path: output/daily.html
+
+# GitHub Pages上で👍/👎をクリックで記録する場合に設定(cloudflare-worker/参照)。
+# endpoint が空のままなら、従来通りHTMLにCLIコマンドのヒントが表示される
+feedback:
+  endpoint: ""   # 例: https://self-curation-feedback.<subdomain>.workers.dev/vote
+  token: ""      # Worker側のFEEDBACK_TOKENシークレットと同じ値にする(簡易なボット対策)

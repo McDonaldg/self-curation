@@ -1,0 +1,11 @@
+name = "self-curation-feedback"
+main = "feedback-worker.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+GITHUB_OWNER = "McDonaldg"
+GITHUB_REPO = "self-curation"
+
+# シークレットはこのファイルに書かず、以下のコマンドで個別に設定する:
+#   wrangler secret put GITHUB_TOKEN
+#   wrangler secret put FEEDBACK_TOKEN   (任意だが公開運用では設定推奨)
